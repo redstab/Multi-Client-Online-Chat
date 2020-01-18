@@ -2,9 +2,15 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
+using System.Security.Cryptography.X509Certificates;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Threading;
-
+using System.IO;
+using System.Net.Security;
+using System.Security.Cryptography;
 
 public abstract class Chat { }
 
@@ -12,189 +18,176 @@ public class Group : Chat { }
 
 public class Personal : Chat { }
 
-// State object for reading client data asynchronously  
-public class StateObject
+public class User
 {
-	// Client  socket.  
-	public Socket workSocket = null;
 
-	public string IPBUFFER;
-	// Size of receive buffer.  
-	public const int BufferSize = 1024;
-	// Receive buffer.  
-	public byte[] buffer = new byte[BufferSize];
-	// Received data string.  
-	public StringBuilder sb = new StringBuilder();
+}
+
+public abstract class OnUserEvent : EventArgs
+{
+	public User AffectedUser { get; set; }
+
+	public OnUserEvent(User user)
+	{
+		AffectedUser = user;
+	}
+}
+
+
+
+public struct EndPoint
+{
+	string Address;
+	int Port;
+
+	public EndPoint(string Address, int Port)
+	{
+		this.Address = Address;
+		this.Port = Port;
+	}
+
+	public IPEndPoint ToIpEndPoint()
+	{
+		return new IPEndPoint(IPAddress.Parse(Address), Port);
+	}
+}
+
+
+public static class WebSocketHelper
+{
+	public static string GetWebSocketKeyFromResponse(string GetResponse)
+	{
+		string Key = "";
+
+		string Pattern = @"(?<=Sec-WebSocket-Key:\s).*";
+
+		Match KeyMatch = Regex.Match(GetResponse,Pattern);
+
+		if (KeyMatch.Success)
+		{
+			Key = KeyMatch.Value;
+		}
+
+		return Key;
+	}
+
+	public static string GetUpgradeRequest(Socket Client)
+	{
+		byte[] ByteBuffer = new byte[1024];
+		int BytesReceived = Client.Receive(ByteBuffer);
+		return Encoding.Default.GetString(ByteBuffer, 0, BytesReceived);
+	}
+
 }
 
 public class Server
 {
-	public static void SuppressException(Action a)
+	/// <summary>
+	/// Socket för att hantera att nya anslutningar kommer in på servern
+	/// </summary>
+	public Socket ListenerSocket { get; set; }
+
+	/// <summary>
+	/// EndPoint för att beskriva ip och port som servern lyssnar på
+	/// </summary>
+	public EndPoint ListenAddress { get; set; }
+
+	public bool Alive { get; set; }
+
+	/// <summary>
+	/// Konstruera en server som ska lyssna på en EndPoint
+	/// </summary>
+	/// <param name="ListenAddress"></param>
+	public Server(EndPoint ListenAddress)
 	{
-		try{a();}
-		catch (Exception) { }
+
+		this.ListenAddress = ListenAddress;
+		ListenerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+		Alive = true;
 	}
-	public static List<StateObject> Clients = new List<StateObject>();
-	public static Socket listener_socket;
-	public static ManualResetEvent accepted = new ManualResetEvent(false);
-	public static void AcceptCallback(IAsyncResult result)
+
+	private void Log(string severity, string message)
 	{
-		accepted.Set();
-
-		Socket listener = (Socket)result.AsyncState;
-		Socket handler = listener.EndAccept(result);
-		Console.WriteLine($"Connected {handler.RemoteEndPoint} successfully");
-		StateObject state = new StateObject();
-		state.workSocket = handler;
-		state.IPBUFFER = handler.RemoteEndPoint.ToString();
-
-		Clients.Add(state);
-
+		Console.WriteLine(DateTime.Now.ToString("[yyyy-MM-dd HH:mm:ss]") + " [" + severity + "] " + message);
 	}
 
-	public static void ListenForUsers()
+	public void StartServer()
 	{
-		while (true)
+		ListenerSocket.Bind(ListenAddress.ToIpEndPoint());
+		ListenerSocket.Listen(0);
+
+		ManualResetEvent UntilConnected = new ManualResetEvent(false);
+
+		while (Alive)
 		{
-			accepted.Reset();
-			listener_socket.BeginAccept(new AsyncCallback(AcceptCallback), listener_socket);
-			accepted.WaitOne();
+			UntilConnected.Reset();
+			Log("INFO", "Waiting for a new connection");
+			ListenerSocket.BeginAccept(AcceptUserCallback, UntilConnected);
+
+			Log("INFO-VERBOSE", "Waiting for server to get the new socket");
+			UntilConnected.WaitOne();
 		}
+
 	}
 
-	public static void RecvPackets()
+	/// <summary>
+	/// Async funktion för att acceptera en ny client till servern.
+	/// Etablerarar också WebSocket Upgraderingen
+	/// </summary>
+	/// <param name="Result">State of async operation</param>
+	private void AcceptUserCallback(IAsyncResult Result)
 	{
-		while (true)
+		Socket NewUser = ListenerSocket.EndAccept(Result);
+		Log("INFO-VERBOSE", "Got the new connection socket");
+		Log("INFO", "Allowing new connections");
+		((ManualResetEvent)Result.AsyncState).Set();
+
+
+		Log("INFO", "Handling WebSocket Upgrade");
+		if (HandleWebSocketUpgrade(NewUser))
 		{
-			for (int i = 0; i < Clients.Count; i++)
-			{
-				var client = Clients[i];
-				if (client.workSocket.Connected)
-				{
-					SuppressException(() => {
-						client.workSocket.BeginReceive(client.buffer, 0, StateObject.BufferSize, 0, new AsyncCallback(ReadCallback), client);
-					});
-				}
-				else
-				{
-					Console.WriteLine("Client {0} Disconnected", client.IPBUFFER);
-					Clients.Remove(client);
-				}
-			}
+			Log("INFO", "WebSocket Upgrade Successful");
+
 		}
+		else
+		{
+			Log("INFO", "WebSocket Upgrade Failed");
+
+		}
+
+
+	}
+	/// <summary>
+	/// Hanterar upgraderingen av protokollet från http till Websockets
+	/// </summary>
+	/// Eftersom att denna funktion körs från en async funktion så kan vi kalla sync funktioner i den utan att blockera huvudtråden
+	/// <param name="Client">Klienten som ska upgraderas</param>
+	/// <returns>Om upgraderingen lyckades</returns>
+	private bool HandleWebSocketUpgrade(Socket Client)
+	{
+		string UpgradeGetRequest = WebSocketHelper.GetUpgradeRequest(Client);
+
+		string SecureKey = WebSocketHelper.GetWebSocketKeyFromResponse(UpgradeGetRequest);
+
+		if(SecureKey == string.Empty)
+		{
+			return false;
+		}
+
+		Console.WriteLine($"Key: {SecureKey}");
+		return true;
 	}
 
+}
+
+public class Program
+{
 	public static void Main()
 	{
-		string ip = "127.0.0.1";
-		int port = 11000;
 
-		IPEndPoint local_endpoint = new IPEndPoint(IPAddress.Parse(ip), port);
+		Server server = new Server(new EndPoint("127.0.0.1", 8010));
 
-		listener_socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+		server.StartServer();
 
-		listener_socket.Bind(local_endpoint);
-
-		listener_socket.Listen(100);
-
-		Console.WriteLine("Server Listening");
-
-		Thread users = new Thread(new ThreadStart(ListenForUsers));
-		Thread packets = new Thread(new ThreadStart(RecvPackets));
-		users.Start();
-		packets.Start();
-		int a = 0;
-
-		while(a == 0)
-		{
-			string input =Console.ReadLine();
-			if(input == "list")
-			{
-				foreach (var client in Clients)
-				{
-					Console.WriteLine("\tclient {0}", client.workSocket.RemoteEndPoint);
-				}
-			}
-			else
-			{
-				a++;
-			}
-		}
-
-		packets.Join();
-		users.Join();
-	}
-	public static void ReadCallback(IAsyncResult ar)
-	{
-		String content = String.Empty;
-
-		// Retrieve the state object and the handler socket  
-		// from the asynchronous state object.  
-		StateObject state = (StateObject)ar.AsyncState;
-		Socket handler = state.workSocket;
-
-		// Read data from the client socket.
-		int bytesRead = 0;
-		if (handler.Connected)
-		{
-			bytesRead = handler.EndReceive(ar);
-		}
-
-		if (bytesRead > 0)
-		{
-			// There  might be more data, so store the data received so far.  
-			state.sb.Append(Encoding.ASCII.GetString(
-				state.buffer, 0, bytesRead));
-
-			// Check for end-of-file tag. If it is not there, read   
-			// more data.  
-			content = state.sb.ToString();
-			if (content.IndexOf("<EOF>") > -1)
-			{
-				// All the data has been read from the   
-				// client. Display it on the console.  
-				Console.WriteLine("Read {0} bytes from socket. \n Data : {1}",
-					content.Length, content);
-				// Echo the data back to the client.  
-				Send(handler, content);
-			}
-			else
-			{
-				// Not all data received. Get more.  
-				handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0,
-				new AsyncCallback(ReadCallback), state);
-			}
-		}
-	}
-
-	private static void Send(Socket handler, String data)
-	{
-		// Convert the string data to byte data using ASCII encoding.  
-		byte[] byteData = Encoding.ASCII.GetBytes(data);
-
-		// Begin sending the data to the remote device.  
-		handler.BeginSend(byteData, 0, byteData.Length, 0,
-			new AsyncCallback(SendCallback), handler);
-	}
-
-	private static void SendCallback(IAsyncResult ar)
-	{
-		try
-		{
-			// Retrieve the socket from the state object.  
-			Socket handler = (Socket)ar.AsyncState;
-
-			// Complete sending the data to the remote device.  
-			int bytesSent = handler.EndSend(ar);
-			Console.WriteLine("Sent {0} bytes to client.", bytesSent);
-
-			handler.Shutdown(SocketShutdown.Both);
-			handler.Close();
-
-		}
-		catch (Exception e)
-		{
-			Console.WriteLine(e.ToString());
-		}
 	}
 }
