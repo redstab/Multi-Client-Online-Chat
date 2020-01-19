@@ -65,7 +65,7 @@ public static class WebSocketHelper
 
 		if (KeyMatch.Success)
 		{
-			Key = KeyMatch.Value;
+			Key = KeyMatch.Value.Trim('\r');
 		}
 
 		return Key;
@@ -73,9 +73,30 @@ public static class WebSocketHelper
 
 	public static string GetUpgradeRequest(Socket Client)
 	{
+		Client.ReceiveTimeout = 1000;
 		byte[] ByteBuffer = new byte[1024];
-		int BytesReceived = Client.Receive(ByteBuffer);
+		int BytesReceived = 0;
+		try
+		{
+			BytesReceived = Client.Receive(ByteBuffer);
+		}
+		catch { }
 		return Encoding.Default.GetString(ByteBuffer, 0, BytesReceived);
+	}
+
+	public static string GetAcceptKey(string SecWebSocketKey)
+	{
+		// https://tools.ietf.org/html/rfc6455#section-4.2.2
+
+		string Hash = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+		string Concatinated = SecWebSocketKey + Hash;
+
+		byte[] HashedValue = new SHA1Managed().ComputeHash(Encoding.Default.GetBytes(Concatinated));
+
+		string Base64Value = Convert.ToBase64String(HashedValue);
+
+		return Base64Value;
 	}
 
 }
@@ -93,6 +114,7 @@ public class Server
 	public EndPoint ListenAddress { get; set; }
 
 	public bool Alive { get; set; }
+	private ManualResetEvent UntilConnected = new ManualResetEvent(false);
 
 	/// <summary>
 	/// Konstruera en server som ska lyssna på en EndPoint
@@ -114,16 +136,13 @@ public class Server
 	public void StartServer()
 	{
 		ListenerSocket.Bind(ListenAddress.ToIpEndPoint());
-		ListenerSocket.Listen(0);
-
-		ManualResetEvent UntilConnected = new ManualResetEvent(false);
+		ListenerSocket.Listen(100);
 
 		while (Alive)
 		{
 			UntilConnected.Reset();
 			Log("INFO", "Waiting for a new connection");
-			ListenerSocket.BeginAccept(AcceptUserCallback, UntilConnected);
-
+			ListenerSocket.BeginAccept(new AsyncCallback(AcceptUserCallback), null);
 			Log("INFO-VERBOSE", "Waiting for server to get the new socket");
 			UntilConnected.WaitOne();
 		}
@@ -140,8 +159,7 @@ public class Server
 		Socket NewUser = ListenerSocket.EndAccept(Result);
 		Log("INFO-VERBOSE", "Got the new connection socket");
 		Log("INFO", "Allowing new connections");
-		((ManualResetEvent)Result.AsyncState).Set();
-
+		UntilConnected.Set();
 
 		Log("INFO", "Handling WebSocket Upgrade");
 		if (HandleWebSocketUpgrade(NewUser))
@@ -152,7 +170,9 @@ public class Server
 		else
 		{
 			Log("INFO", "WebSocket Upgrade Failed");
-
+			NewUser.Send(Encoding.Default.GetBytes("Not a Websocket Connection"));
+			NewUser.Shutdown(SocketShutdown.Both);
+			NewUser.Close();
 		}
 
 
@@ -174,7 +194,12 @@ public class Server
 			return false;
 		}
 
-		Console.WriteLine($"Key: {SecureKey}");
+		string ResponseKey = WebSocketHelper.GetAcceptKey(SecureKey);
+
+		string Response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + ResponseKey + "\r\n\r\n";
+
+		Client.Send(Encoding.Default.GetBytes(Response));
+
 		return true;
 	}
 
@@ -185,7 +210,9 @@ public class Program
 	public static void Main()
 	{
 
-		Server server = new Server(new EndPoint("127.0.0.1", 8010));
+		EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
+
+		Server server = new Server(ListenAddress);
 
 		server.StartServer();
 
