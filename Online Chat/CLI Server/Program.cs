@@ -59,10 +59,51 @@ public class WebSocketHeaderFrame
 	public long PayloadLength { get; private set; } // Hur stort payload som skickades
 	public WebSocketOpCode OpCode { get; private set; } // Vilken typ av payload som skickades
 	public bool FinalPacket { get { return FIN == 1; } } // Wrapper för FIN
+
 	public WebSocketHeaderFrame(byte[] InputBuffer, Socket ConnectedSocket)
 	{
 		ParseHeader(InputBuffer);
 		GetRemaindingHeader(ConnectedSocket);
+	}
+
+	public WebSocketHeaderFrame(long PayloadSize, WebSocketOpCode PayloadOpCode, bool Final)
+	{
+		OpCode = PayloadOpCode;
+
+		int Size = (int)PayloadSize; //Basecase Storleken får plats i först byten (7bits)
+		int HeaderByteSize = 2;
+		if (PayloadSize > 125)
+		{
+			if (PayloadSize < Math.Pow(2, 16)) // Storleken får plats i 2 bytes
+			{
+				Size = 126;
+				HeaderByteSize += 2;
+			}else if (PayloadSize < Math.Pow(2, 64)) // Storleken får plats i 8 bytes
+			{
+				Size = 127;
+				HeaderByteSize += 8;
+			}
+		}
+
+		byte[] Header = new byte[HeaderByteSize];
+
+		Header[0] = (byte)(0b00000000 | ((Final ? 1 : 0) << 7) | (int)PayloadOpCode); // FIN och OpCode i första byten
+
+		Header[1] = (byte)(0b00000000 | Size);
+
+		if(PayloadSize > 125)
+		{
+			for(int i = 0; i < HeaderByteSize; i++)
+			{
+				
+			}
+		}
+
+
+		Console.WriteLine(Convert.ToString(Header[0], 2).PadLeft(8, '0'));
+		Console.WriteLine(Convert.ToString(Header[1], 2).PadLeft(8, '0'));
+		
+
 	}
 
 	private void GetRemaindingHeader(Socket ConnectedSocket)
@@ -112,10 +153,11 @@ public class WebSocketHeaderFrame
 
 		int HeaderByteSize = 0;
 
-		if (PayloadLength == 126) 
+		if (PayloadLength == 126)
 		{
 			HeaderByteSize = 2; // Payload storleken är 2 bytes (int16)
-		}else if(PayloadLength == 127)
+		}
+		else if (PayloadLength == 127)
 		{
 			HeaderByteSize = 8; // Payload storleken är 8 bytes (long/int64)
 		}
@@ -123,22 +165,22 @@ public class WebSocketHeaderFrame
 		byte[] HeaderBuffer = new byte[HeaderByteSize + (MASK == 1 ? 4 : 0)]; // allokera buffer för payload storleken och masknyckeln (4 bytes) om MASK == 1
 
 		ConnectedSocket.Receive(HeaderBuffer); // ta emot storleken
-		
-		if(PayloadLength == 126 || PayloadLength == 127) // om vi måste ta emot en större storlek
+
+		if (PayloadLength == 126 || PayloadLength == 127) // om vi måste ta emot en större storlek
 		{
 			PayloadLength = 0; // reset
 
-			for(int i = 0; i < HeaderByteSize; i++)
+			for (int i = 0; i < HeaderByteSize; i++)
 			{
 				// Se topp kommentar (lägger ihop många bytes till en storlek)
 				PayloadLength |= (long)(HeaderBuffer[i] << (8 * HeaderByteSize) - ((i + 1) * 8));
 			}
 		}
 
-		if(MASK == 1) // Om vi ska ta emot en masknyckel
+		if (MASK == 1) // Om vi ska ta emot en masknyckel
 		{
 			MaskKey = new byte[4];
-			for(int i = 0; i < 4; i++)
+			for (int i = 0; i < 4; i++)
 			{
 				// Lägger masknyckeln i sin buffer
 				MaskKey[i] = HeaderBuffer[i + HeaderByteSize];
@@ -152,10 +194,10 @@ public class WebSocketHeaderFrame
 
 		//Extrahera värden från WebSocket paketet (Se klass kommentar för paket struktur)
 
-		FIN = (Buffer[0] & 0b10000000) >> 7; 
+		FIN = (Buffer[0] & 0b10000000) >> 7;
 		// Sista paket i ett meddelande ?
 
-		RSV1 = (Buffer[0] & 0b01000000) >> 6; 
+		RSV1 = (Buffer[0] & 0b01000000) >> 6;
 		RSV2 = (Buffer[0] & 0b00100000) >> 5;
 		RSV3 = (Buffer[0] & 0b00010000) >> 4;
 		// Reserverade värden för unika implementeringar
@@ -186,7 +228,7 @@ public class WebSocketFrame
 	{
 		byte[] PayloadBuffer = new byte[HeaderFrame.PayloadLength];
 		ClientSocket.Receive(PayloadBuffer);
-		for(int i = 0; i < PayloadBuffer.Length; i++)
+		for (int i = 0; i < PayloadBuffer.Length; i++)
 		{
 			PayloadBuffer[i] = (byte)(PayloadBuffer[i] ^ HeaderFrame.MaskKey[i % 4]);
 		}
@@ -201,7 +243,7 @@ public class WebSocketPacket
 
 	public string Payload { get; private set; }
 
-	public WebSocketOpCode PayloadOpCode { get; private set;}
+	public WebSocketOpCode PayloadOpCode { get; private set; }
 
 	public WebSocketPacket(WebSocketFrame InitialPacket)
 	{
@@ -225,12 +267,18 @@ public class User
 	public Server ConnectedServer { get; set; }
 	private byte[] ReceiveBuffer;
 	private WebSocketPacket CurrentPacket { get; set; }
+
 	public User(Socket ConnectedSocket, Server ConnectedServer)
 	{
 		this.ConnectedSocket = ConnectedSocket;
 		this.ConnectedServer = ConnectedServer;
 		ReceiveBuffer = new byte[2];
 		ConnectedSocket.BeginReceive(ReceiveBuffer, 0, 2, SocketFlags.None, ReceiveMessageCallback, null);
+	}
+
+	public void Send(string data)
+	{
+
 	}
 
 	private void ReceiveMessageCallback(IAsyncResult Result)
@@ -244,13 +292,13 @@ public class User
 
 		CurrentFrame.ReceivePayload(ConnectedSocket);
 
-		if(CurrentFrame.PayloadOpCode == WebSocketOpCode.ConnectionCloseFrame)
+		if (CurrentFrame.PayloadOpCode == WebSocketOpCode.ConnectionCloseFrame)
 		{
 			ConnectedServer.DisconnectUser(this);
 			return;
 		}
 
-		if(CurrentPacket == null)
+		if (CurrentPacket == null)
 		{
 			CurrentPacket = new WebSocketPacket(CurrentFrame);
 		}
@@ -268,7 +316,6 @@ public class User
 
 		Array.Clear(ReceiveBuffer, 0, ReceiveBuffer.Length);
 
-		GC.Collect();
 		ConnectedSocket.BeginReceive(ReceiveBuffer, 0, 2, SocketFlags.None, ReceiveMessageCallback, null);
 	}
 }
@@ -466,11 +513,14 @@ public class Program
 	public static void Main()
 	{
 
-		EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
+		WebSocketHeaderFrame head = new WebSocketHeaderFrame(100, WebSocketOpCode.TextFrame, true);
+		//WebSocketHeaderFrame head1 = new WebSocketHeaderFrame(1, WebSocketOpCode.TextFrame, false);
 
-		Server server = new Server(ListenAddress);
+		//EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
 
-		server.StartServer();
+		//Server server = new Server(ListenAddress);
+
+		//server.StartServer();
 
 	}
 }
