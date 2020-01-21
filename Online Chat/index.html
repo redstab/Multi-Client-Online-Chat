@@ -9,19 +9,20 @@
                 var socket = new WebSocket("ws://127.0.0.1:8010");
     
                 socket.onopen = function(e) {
-                    console.log('Connected to server!');
+                    // document.append('Connected to server!');
+                    document.getElementById("logger").textContent += '\nConnected to server!';
                 }
     
                 socket.onclose = function(e) {
-                    console.log('Disconnected from server');
+                    document.getElementById("logger").textContent += '\nDisconnected from the server!';
                 }
     
                 socket.onmessage = function(e) {
-                    console.log('Message from server:\n'+e.data);
+                    document.getElementById("logger").textContent += '\nMessage from server:'+e.data;
                 }
     
                 socket.onerror = function(e) {
-                    console.log('An error has occured!\n'+e.message);
+                    document.getElementById("logger").textContent += '\An error has occured!\n'+e.message;
                 }
     
                 function SendToServer() {
@@ -32,5 +33,6 @@
             <h1 style="width:100%;float:left;">WEBSOCKET TEST</h1>
             <input id="tb-send" type="text" value="" />
             <button onclick="SendToServer()">Send!</button>
+            <pre id="logger"></pre>
         </body>
     </html>

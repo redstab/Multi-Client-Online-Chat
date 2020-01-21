@@ -19,6 +19,29 @@ public class Group : Chat { }
 
 public class Personal : Chat { }
 
+public class OnMessageAction : EventArgs
+{
+	public User Sender { get; private set; }
+	public WebSocketPacket Packet { get; private set; }
+	public (string Payload, WebSocketOpCode Opcode) Payload { get; set; }
+
+	public OnMessageAction(User Sender, (string Payload, WebSocketOpCode Opcode) Packet)
+	{
+		this.Sender = Sender;
+		this.Payload = Packet;
+	}
+}
+
+public class OnUserAction : EventArgs
+{
+	public User Sender { get; private set; }
+
+	public OnUserAction(User Sender)
+	{
+		this.Sender = Sender;
+	}
+}
+
 public enum WebSocketOpCode
 {
 	ContinuationFrame = 0,
@@ -321,8 +344,6 @@ public class User
 		SendFrame(Text, WebSocketOpCode.TextFrame, true);
 	}
 
-
-
 	private void SendMessageCallback(IAsyncResult Result)
 	{
 		ConnectedSocket.EndSend(Result);
@@ -332,8 +353,6 @@ public class User
 	{
 
 		ConnectedSocket.EndReceive(Result);
-
-		//TODO Implement RSA Encryption HERE
 
 		WebSocketFrame CurrentFrame = new WebSocketFrame(ReceiveBuffer, ConnectedSocket);
 
@@ -354,20 +373,7 @@ public class User
 
 		if (CurrentFrame.HeaderFrame.FinalPacket)
 		{
-			Console.WriteLine(
-				$"Packet {CurrentPacket.Frames.Count} frames\nPayload: {CurrentPacket.Payload.Length}\nOpcode: {CurrentPacket.PayloadOpCode}\n"
-			);
-
-			SendFrames(new List<string>() {
-				"SendFrames() - ",
-				CurrentPacket.Payload,
-				CurrentPacket.Payload + "|",
-				CurrentPacket.Payload + "|:>"
-			}, WebSocketOpCode.TextFrame);
-
-			SendFrame(CurrentPacket.Payload + " SendFrame()", WebSocketOpCode.TextFrame, true);
-
-			SendText(CurrentPacket.Payload + " SendText()");
+			ConnectedServer.Receive(this, CurrentPacket.Payload, CurrentPacket.PayloadOpCode);
 
 			CurrentPacket = null;
 			GC.Collect();
@@ -376,16 +382,6 @@ public class User
 		Array.Clear(ReceiveBuffer, 0, ReceiveBuffer.Length);
 
 		ConnectedSocket.BeginReceive(ReceiveBuffer, 0, 2, SocketFlags.None, ReceiveMessageCallback, null);
-	}
-}
-
-public abstract class OnUserEvent : EventArgs
-{
-	public User AffectedUser { get; set; }
-
-	public OnUserEvent(User user)
-	{
-		AffectedUser = user;
 	}
 }
 
@@ -469,7 +465,16 @@ public class Server
 	public EndPoint ListenAddress { get; set; }
 
 	public bool Alive { get; set; }
+
 	private ManualResetEvent UntilConnected = new ManualResetEvent(false);
+
+	public bool LogEnable = false;
+
+	public event EventHandler<OnMessageAction> OnMessageSend;
+	public event EventHandler<OnMessageAction> OnMessageReceive;
+	public event EventHandler<OnUserAction> OnUserConnect;
+	public event EventHandler<OnUserAction> OnUserDisconnect;
+
 	public List<User> Users = new List<User>();
 	/// <summary>
 	/// Konstruera en server som ska lyssna på en EndPoint
@@ -485,7 +490,10 @@ public class Server
 
 	private void Log(string severity, string message)
 	{
-		Console.WriteLine(DateTime.Now.ToString("[yyyy-MM-dd HH:mm:ss]") + " [" + severity + "] " + message);
+		if (LogEnable)
+		{
+			Console.WriteLine(DateTime.Now.ToString("[yyyy-MM-dd HH:mm:ss]") + " [" + severity + "] " + message);
+		}
 	}
 
 	public void StartServer()
@@ -521,7 +529,9 @@ public class Server
 		{
 			Log("INFO", "WebSocket Upgrade Successful");
 			Log("INFO", "Added User to UserList");
-			Users.Add(new User(NewSocket, this));
+			var NewUser = new User(NewSocket, this);
+			Users.Add(NewUser);
+			OnUserConnect(this, new OnUserAction(NewUser));
 		}
 		else
 		{
@@ -532,6 +542,16 @@ public class Server
 		}
 	}
 
+	public void Receive(User user, string Payload, WebSocketOpCode OpCode)
+	{
+		OnMessageReceive(this, new OnMessageAction(user, (Payload, OpCode)));
+	}
+
+	public void Send(User user, (string Payload, WebSocketOpCode Opcode) Packet)
+	{
+		OnMessageSend(this, new OnMessageAction(user, (Packet.Payload, Packet.Opcode)));
+		user.SendFrame(Packet.Payload, Packet.Opcode, true);
+	}
 	/// <summary>
 	/// Hanterar upgraderingen av protokollet från http till Websockets
 	/// </summary>
@@ -560,6 +580,7 @@ public class Server
 
 	public void DisconnectUser(User user)
 	{
+		OnUserDisconnect(this, new OnUserAction(user));
 		user.ConnectedSocket.Shutdown(SocketShutdown.Both);
 		user.ConnectedSocket.Close();
 		Users.Remove(user);
@@ -575,6 +596,27 @@ public class Program
 		EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
 
 		Server server = new Server(ListenAddress);
+
+		server.OnMessageReceive += (object sender, OnMessageAction e) =>
+		{
+			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint.ToString()} Received packet containing a frame with data: {e.Payload.Payload}");
+			server.Send(e.Sender, ("RESP:" + e.Payload.Payload, WebSocketOpCode.TextFrame));
+		};
+
+		server.OnMessageSend += (object sender, OnMessageAction e) =>
+		{
+			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint.ToString()} Sending {e.Payload.Payload}");
+		};
+
+		server.OnUserConnect += (object sender, OnUserAction e) =>
+		{
+			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint.ToString()} Connected to the server");
+		};
+
+		server.OnUserDisconnect += (object sender, OnUserAction e) =>
+		{
+			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint.ToString()} Disconnected from the server");
+		};
 
 		server.StartServer();
 
