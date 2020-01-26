@@ -1,38 +1,107 @@
 <DOCTYPE html>
     <html>
-        <head>
-            <meta charset="utf-8">
-            <title>C# WebSocket Test</title>
-        </head>
-        <body>
-            <script type="text/javascript">
-                var socket = new WebSocket("ws://127.0.0.1:8010");
-    
-                socket.onopen = function(e) {
-                    // document.append('Connected to server!');
-                    document.getElementById("logger").textContent += '\nConnected to server!';
+
+    <head>
+        <meta charset="utf-8">
+        <title>C# WebSocket Test</title>
+    </head>
+
+    <body>
+        <script type="text/javascript">
+
+            var aesKey = generateKey().then(a => {
+                console.log(a.toString());
+            });
+
+            var socket = new WebSocket("ws://127.0.0.1:8010");
+
+            socket.onopen = function (e) {
+                // document.append('Connected to server!');
+                document.getElementById("logger").textContent += '\nConnected to server!';
+            }
+
+            socket.onclose = function (e) {
+                document.getElementById("logger").textContent += '\nDisconnected from the server!';
+            }
+
+            socket.onmessage = function (e) {
+                var packet = ParsePacket(e.data);
+                console.log(packet);
+            }
+
+            socket.onerror = function (e) {
+                document.getElementById("logger").textContent += '\An error has occured!\n' + e.message;
+            }
+
+            function SendToServer() {
+                var text = document.getElementById('tb-send').value;
+                socket.send(text);
+            }
+
+            function ParsePacket(packet) {
+                var JsonPacket = ParseJSON(packet);
+
+                if (JsonPacket != false) {
+                    console.log(JsonPacket);
+                } else {
+                    return false;
                 }
-    
-                socket.onclose = function(e) {
-                    document.getElementById("logger").textContent += '\nDisconnected from the server!';
+
+                return true;
+            }
+
+            function ParseJSON(jsonString) {
+                try {
+                    var o = JSON.parse(jsonString);
+                    if (o && typeof o === "object") {
+                        return o;
+                    }
+                } catch (e) {
+                    return false;
                 }
-    
-                socket.onmessage = function(e) {
-                    document.getElementById("logger").textContent += '\nMessage from server:'+e.data;
+            }
+
+            function ab2str(buf) {
+                return String.fromCharCode.apply(null, new Uint8Array(buf));
+            }
+
+            function str2ab(str) {
+                var buf = new ArrayBuffer(str.length);
+                var bufView = new Uint8Array(buf);
+                for (var i = 0, strLen = str.length; i < strLen; i++) {
+                    bufView[i] = str.charCodeAt(i);
                 }
-    
-                socket.onerror = function(e) {
-                    document.getElementById("logger").textContent += '\An error has occured!\n'+e.message;
-                }
-    
-                function SendToServer() {
-                    var text = document.getElementById('tb-send').value;
-                    socket.send(text);
-                }
-            </script>
-            <h1 style="width:100%;float:left;">WEBSOCKET TEST</h1>
-            <input id="tb-send" type="text" value="" />
-            <button onclick="SendToServer()">Send!</button>
-            <pre id="logger"></pre>
-        </body>
+                return buf;
+            }
+
+            async function generateKey(){
+                var cryptoKey = await generateCryptoKey();
+                var aesKey = await exportCryptoKey(cryptoKey);
+                return new Uint8Array(aesKey);
+            }
+
+            async function generateCryptoKey(){
+                return crypto.subtle.generateKey({
+                        name: "AES-CBC",
+                        length: 256
+                    },
+                    true,
+                    [
+                        "encrypt",
+                        "decrypt"
+                    ]
+                );
+            }
+
+            async function exportCryptoKey(key){
+                return crypto.subtle.exportKey("raw", key);
+            }
+
+        </script>
+        <h1>WEBSOCKET TEST</h1>
+        <input id="tb-send" type="text" value="" />
+        <button onclick="SendToServer()">Send!</button>
+        <pre id="logger"></pre>
+    </body>
+
     </html>
