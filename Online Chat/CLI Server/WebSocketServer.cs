@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
@@ -7,7 +9,7 @@ using System.Threading;
 public class OnMessageAction : EventArgs
 {
 	public WebSocketUser Sender { get; private set; }
-	public (string Payload, WebSocketOpCode Opcode) Payload { get; set; }
+	public (string PayloadString, WebSocketOpCode Opcode) Payload { get; set; }
 
 	public OnMessageAction(WebSocketUser Sender, (string Payload, WebSocketOpCode Opcode) Packet)
 	{
@@ -32,6 +34,8 @@ public class Server
 	/// Socket för att hantera att nya anslutningar kommer in på servern
 	/// </summary>
 	public Socket ListenerSocket { get; set; }
+
+	public RSA ServerEncryptionManager;
 
 	/// <summary>
 	/// EndPoint för att beskriva ip och port som servern lyssnar på
@@ -59,6 +63,7 @@ public class Server
 		this.ListenAddress = ListenAddress;
 		ListenerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 		Alive = true;
+		ServerEncryptionManager = new RSA();
 	}
 
 	private void Log(string severity, string message)
@@ -102,7 +107,14 @@ public class Server
 		{
 			Log("INFO", "WebSocket Upgrade Successful");
 			Log("INFO", "Added User to UserList");
+
 			var NewUser = new WebSocketUser(NewSocket, this);
+			var PublicKeyPemObject = new JObject();
+			PublicKeyPemObject["KeyType"] = "RSAPublicKey";
+			PublicKeyPemObject["Key"] = ServerEncryptionManager.ExportPublicKey();
+
+			NewUser.SendJSON(PublicKeyPemObject, "PublicKeyExchange", false);
+
 			Users.Add(NewUser);
 			OnUserConnect(this, new OnUserAction(NewUser));
 		}
@@ -118,24 +130,88 @@ public class Server
 	public void Receive(WebSocketUser user, string Payload, WebSocketOpCode OpCode)
 	{
 		// Decrypt here
-		if (user.isEncrypted())
+
+		JObject Deserilized = JsonConvert.DeserializeObject<JObject>(Payload);
+
+		string Type = Deserilized["Type"].ToObject<string>();
+
+		string IV = Deserilized["IV"].ToObject<string>();
+
+		JToken Packet = Deserilized["Packet"];
+
+		if (Packet.Type == JTokenType.String)
 		{
 
+			byte[] EncryptedPayload = Packet.ToObject<byte[]>();
+
+			if (IV == "blank") // => decrypt with rsa private key
+			{
+
+				var AesKey = ServerEncryptionManager.Decrypt(EncryptedPayload);
+
+				user.InitilizeEncryption(AesKey);
+
+				Deserilized["Packet"] = AesKey;
+
+			}
+			else
+			{
+				user.EncryptionManager.Manager.IV = Deserilized["IV"].ToObject<byte[]>();
+				Deserilized["Packet"] = user.EncryptionManager.Decrypt(EncryptedPayload);
+
+				OnMessageReceive(this, new OnMessageAction(user, (Payload, OpCode)));
+			}
+		}
+		else
+		{
+			OnMessageReceive(this, new OnMessageAction(user, (JsonConvert.SerializeObject(Deserilized), OpCode)));
 		}
 
-		OnMessageReceive(this, new OnMessageAction(user, (Payload, OpCode)));
+		//Console.WriteLine($"Type: {Type}\nIV: {IV}\nPacket: {Packet}");
+
+		//if (user.isEncrypted())
+		//{
+		//	Payload = user.EncryptionManager.Decrypt(Encoding.Default.GetBytes(Payload));
+		//}
+
+
+
+
 	}
 
-	public void Send(WebSocketUser user, (string Payload, WebSocketOpCode Opcode) Packet)
+	public void SendText(WebSocketUser user, string Payload)
 	{
-		OnMessageSend(this, new OnMessageAction(user, (Packet.Payload, Packet.Opcode)));
-		// Encrypt here
-		if (user.isEncrypted())
-		{
-
-		}
-		user.SendFrame(Packet.Payload, Packet.Opcode, true);
+		JObject packet = new JObject();
+		packet["Sträng"] = Payload;
+		SendPacket(user, (packet, "text"));
 	}
+
+	public void SendPacket(WebSocketUser user, (JObject Packet, string DataType) ServerPacket)
+	{
+		JObject packet = new JObject();
+
+		user.EncryptionManager.Manager.GenerateIV();
+
+		//byte[] sträng = Encoding.UTF8.GetBytes(ServerPacket.Packet.ToString());
+
+		//foreach (var b in sträng)
+		//{
+		//	Console.Write($"{b} ");
+		//}
+
+		var EncryptionData = user.EncryptionManager.Encrypt(ServerPacket.Packet.ToString());
+
+		packet["Type"] = ServerPacket.DataType;
+
+		packet["IV"] = user.EncryptionManager.Manager.IV;
+
+		packet["Packet"] = EncryptionData;
+
+		user.SendFrame(packet.ToString(), WebSocketOpCode.TextFrame, true);
+
+		OnMessageSend(this, new OnMessageAction(user, (ServerPacket.Packet.ToString(), WebSocketOpCode.TextFrame)));
+	}
+
 	/// <summary>
 	/// Hanterar upgraderingen av protokollet från http till Websockets
 	/// </summary>

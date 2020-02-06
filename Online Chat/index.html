@@ -8,15 +8,16 @@
 
     <body>
         <script type="text/javascript">
-
-            var aesKey = generateKey().then(a => {
-                console.log(a.toString());
-            });
+            var aesKey;
+            var aesKeyBuffer;
+            var rsaKey;
 
             var socket = new WebSocket("ws://127.0.0.1:8010");
 
-            socket.onopen = function (e) {
+            socket.onopen = async function (e) {
                 // document.append('Connected to server!');
+                await generateKey();
+                console.log(aesKeyBuffer);
                 document.getElementById("logger").textContent += '\nConnected to server!';
             }
 
@@ -25,32 +26,99 @@
             }
 
             socket.onmessage = function (e) {
+                console.log(e.data);
                 var packet = ParsePacket(e.data);
                 console.log(packet);
             }
 
             socket.onerror = function (e) {
-                document.getElementById("logger").textContent += '\An error has occured!\n' + e.message;
+                document.getElementById("logger").textContent += '\nAn error has occured!\n' + e.message;
             }
 
             function SendToServer() {
                 var text = document.getElementById('tb-send').value;
-                socket.send(text);
+                var packet = {
+                    Type: "text",
+                    IV: "blank",
+                    Packet:{
+                        sträng: text
+                    }
+                }
+                socket.send(JSON.stringify(packet));
             }
 
-            function ParsePacket(packet) {
+            async function ParsePacket(packet) {
                 var JsonPacket = ParseJSON(packet);
-
+                console.log(JsonPacket);
+                console.log(packet);
                 if (JsonPacket != false) {
-                    console.log(JsonPacket);
-                } else {
-                    return false;
+                    var TypeFunc = window[JsonPacket.Type];
+                    var IV = ExtractIV(JsonPacket);
+                    var PacketContent = JsonPacket.Packet;
+                    console.log("Type", JsonPacket.Type);
+                    console.log("IV", IV);
+
+                    
+
+                    if (IV) {
+                        PacketContent = new TextDecoder().decode((await Decrypt(str2ab(atob(PacketContent)), IV)));
+                    }
+                    // console.log(PacketContent);
+                    if (TypeFunc) {
+                        TypeFunc(PacketContent);
+                    } else {
+                        console.log("Unkown Type");
+                        return false;
+                    }
                 }
 
                 return true;
             }
 
+            async function text(json){
+                
+                console.log(JSON.parse(json));
+            }
+
+            async function PublicKeyExchange(json) {
+                var pemString = json["Key"];
+                const pemHeader = "-----BEGIN PRIVATE KEY-----";
+                const pemFooter = "-----END PRIVATE KEY-----";
+                const pemContents = pemString.substring(pemHeader.length, pemString.length - pemFooter.length);
+                console.log(pemContents);
+                rsaKey = await importRsaPublicKey(pemContents);
+                console.log("Imported PublicKey");
+
+                // console.log(aesKeyBuffer);
+
+                crypto.subtle.encrypt({
+                        name: "RSA-OAEP"
+                    },
+                    rsaKey,
+                    aesKeyBuffer
+                ).then((encrypted) => {
+                    console.log(encrypted);
+                    var packet = {
+                        Type: "AesKeyExchange",
+                        IV: "blank",
+                        "Packet": btoa(ab2str(encrypted))
+                    };
+                    socket.send(JSON.stringify(packet));
+                });
+
+            }
+
+            function ExtractIV(json) {
+                var base64_iv = json["IV"];
+                if (base64_iv && base64_iv !== "blank") {
+                    return new Uint8Array(str2ab(atob(base64_iv)));
+                } else {
+                    return false;
+                }
+            }
+
             function ParseJSON(jsonString) {
+                console.log(jsonString);
                 try {
                     var o = JSON.parse(jsonString);
                     if (o && typeof o === "object") {
@@ -74,13 +142,36 @@
                 return buf;
             }
 
-            async function generateKey(){
-                var cryptoKey = await generateCryptoKey();
-                var aesKey = await exportCryptoKey(cryptoKey);
-                return new Uint8Array(aesKey);
+            async function Encrypt(str) {
+                iv = window.crypto.getRandomValues(new Uint8Array(16));
+                return {
+                    IV: iv,
+                    Encrypted: await window.crypto.subtle.encrypt({
+                            name: "AES-CBC",
+                            iv
+                        },
+                        aesKey,
+                        str2ab(str)
+                    )
+                };
             }
 
-            async function generateCryptoKey(){
+            async function Decrypt(buffer, iv) {
+                return window.crypto.subtle.decrypt({
+                        name: "AES-CBC",
+                        iv
+                    },
+                    aesKey,
+                    buffer
+                );
+            }
+
+            async function generateKey() {
+                aesKey = await generateCryptoKey();
+                aesKeyBuffer = new Uint8Array(await exportCryptoKey(aesKey));
+            }
+
+            async function generateCryptoKey() {
                 return crypto.subtle.generateKey({
                         name: "AES-CBC",
                         length: 256
@@ -93,10 +184,23 @@
                 );
             }
 
-            async function exportCryptoKey(key){
+            async function exportCryptoKey(key) {
                 return crypto.subtle.exportKey("raw", key);
             }
 
+            function importRsaPublicKey(pem) {
+                const binaryDer = new Uint8Array(str2ab(atob(pem)));
+                console.log("Importing RSAKEY", binaryDer);
+                return window.crypto.subtle.importKey(
+                    "spki",
+                    binaryDer, {
+                        name: "RSA-OAEP",
+                        hash: "SHA-1" // ska nog vara sha-1 istället för 256
+                    },
+                    true,
+                    ["encrypt"]
+                );
+            }
         </script>
         <h1>WEBSOCKET TEST</h1>
         <input id="tb-send" type="text" value="" />

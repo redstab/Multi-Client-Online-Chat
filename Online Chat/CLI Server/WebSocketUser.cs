@@ -25,9 +25,15 @@ public class WebSocketUser
 		ConnectedSocket.BeginReceive(ReceiveBuffer, 0, 2, SocketFlags.None, ReceiveMessageCallback, null);
 	}
 
-	public void InitilizeEncryption(byte[] Key, byte[] IV)
+	public void InitilizeEncryption(byte[] Key)
 	{
-		EncryptionManager = new AES(Key, IV);
+		EncryptionManager = new AES(Key);
+
+	}
+
+	public void InitilizeEncryption()
+	{
+		EncryptionManager = new AES();
 	}
 
 	public void SendFrame(string Data, WebSocketOpCode OpCode, bool LastFrame)
@@ -52,6 +58,26 @@ public class WebSocketUser
 
 		//Skicka sista framen
 		SendFrame(Data[Data.Count - 1], WebSocketOpCode.ContinuationFrame, true);
+	}
+
+	public void SendJSON(JObject json, string type, bool encrypted)
+	{
+
+		JObject Packet = new JObject();
+		Packet["Type"] = type;
+		if (encrypted)
+		{
+			EncryptionManager.Manager.GenerateIV();
+			Packet["IV"] = EncryptionManager.Manager.IV;
+			Packet["Packet"] = EncryptionManager.Encrypt(json.ToString());
+		}
+		else
+		{
+			Packet["IV"] = "blank";
+			Packet["Packet"] = json;
+		}
+
+		SendFrame(Packet.ToString(), WebSocketOpCode.TextFrame, true);
 	}
 
 	public void SendText(string Text)

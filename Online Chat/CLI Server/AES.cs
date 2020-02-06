@@ -17,6 +17,11 @@ public class AES
 		Manager.IV = IV;
 	}
 
+	public AES(byte[] Key)
+	{
+		Manager.Key = Key;
+	}
+
 	public AES() { }
 
 	/// <summary>
@@ -52,6 +57,8 @@ public class AES
 
 		byte[] Encrypted;
 
+		Manager.GenerateIV();
+
 		ICryptoTransform encryptor = Manager.CreateEncryptor(Manager.Key, Manager.IV);
 
 		using (MemoryStream msEncrypt = new MemoryStream())
@@ -70,9 +77,8 @@ public class AES
 
 	}
 
-	public string Derypt(byte[] Input)
+	public string Decrypt(byte[] Input)
 	{
-
 		string Decrypted = "";
 		// Create a decrytor to perform the stream transform.
 		ICryptoTransform decryptor = Manager.CreateDecryptor(Manager.Key, Manager.IV);

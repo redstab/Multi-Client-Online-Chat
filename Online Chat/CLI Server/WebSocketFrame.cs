@@ -30,7 +30,7 @@ public class WebSocketFrame
 			RSV2 = 0,
 			RSV3 = 0
 		};
-		PayloadData = Encoding.Default.GetString(HeaderFrame.Serilize()) + PayloadData;
+		PayloadData = Encoding.Default.GetString(HeaderFrame.Serilize()) + Encoding.UTF8.GetString(Encoding.Default.GetBytes(PayloadData));
 
 		return Encoding.Default.GetBytes(PayloadData);
 	}
@@ -43,7 +43,7 @@ public class WebSocketFrame
 		{
 			PayloadBuffer[i] = (byte)(PayloadBuffer[i] ^ HeaderFrame.MaskKey[i % 4]);
 		}
-		PayloadData = Encoding.Default.GetString(PayloadBuffer);
+		PayloadData = Encoding.UTF8.GetString(PayloadBuffer);
 		PayloadOpCode = HeaderFrame.OpCode;
 	}
 }
