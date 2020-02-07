@@ -77,28 +77,26 @@ public class AES
 
 	}
 
-	public string Decrypt(byte[] Input)
+	public byte[] Decrypt(byte[] Input)
 	{
 		string Decrypted = "";
 		// Create a decrytor to perform the stream transform.
 		ICryptoTransform decryptor = Manager.CreateDecryptor(Manager.Key, Manager.IV);
 
 		// Create the streams used for decryption. 
-		using (MemoryStream msDecrypt = new MemoryStream(Input))
+		return PerformCryptography(Input, decryptor);
+	}
+
+	private byte[] PerformCryptography(byte[] data, ICryptoTransform cryptoTransform)
+	{
+		using (var ms = new MemoryStream())
+		using (var cryptoStream = new CryptoStream(ms, cryptoTransform, CryptoStreamMode.Write))
 		{
-			using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
-			{
-				using (StreamReader srDecrypt = new StreamReader(csDecrypt))
-				{
+			cryptoStream.Write(data, 0, data.Length);
+			cryptoStream.FlushFinalBlock();
 
-					// Read the decrypted bytes from the decrypting stream 
-					// and place them in a string.
-					Decrypted = srDecrypt.ReadToEnd();
-				}
-			}
+			return ms.ToArray();
 		}
-
-		return Decrypted;
 	}
 
 }

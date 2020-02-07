@@ -46,9 +46,8 @@ public class Server
 
 	private ManualResetEvent UntilConnected = new ManualResetEvent(false);
 
-	public bool LogEnable = true;
+	public bool LogEnable = false;
 
-	public event EventHandler<OnMessageAction> OnMessageSend;
 	public event EventHandler<OnMessageAction> OnMessageReceive;
 	public event EventHandler<OnUserAction> OnUserConnect;
 	public event EventHandler<OnUserAction> OnUserDisconnect;
@@ -157,59 +156,16 @@ public class Server
 			else
 			{
 				user.EncryptionManager.Manager.IV = Deserilized["IV"].ToObject<byte[]>();
-				Deserilized["Packet"] = user.EncryptionManager.Decrypt(EncryptedPayload);
+				byte[] DecryptedString = user.EncryptionManager.Decrypt(EncryptedPayload);
+				Deserilized["Packet"] = Encoding.Default.GetString(DecryptedString);
 
-				OnMessageReceive(this, new OnMessageAction(user, (Payload, OpCode)));
+				OnMessageReceive(this, new OnMessageAction(user, (Deserilized.ToString(), OpCode)));
 			}
 		}
 		else
 		{
 			OnMessageReceive(this, new OnMessageAction(user, (JsonConvert.SerializeObject(Deserilized), OpCode)));
 		}
-
-		//Console.WriteLine($"Type: {Type}\nIV: {IV}\nPacket: {Packet}");
-
-		//if (user.isEncrypted())
-		//{
-		//	Payload = user.EncryptionManager.Decrypt(Encoding.Default.GetBytes(Payload));
-		//}
-
-
-
-
-	}
-
-	public void SendText(WebSocketUser user, string Payload)
-	{
-		JObject packet = new JObject();
-		packet["Sträng"] = Payload;
-		SendPacket(user, (packet, "text"));
-	}
-
-	public void SendPacket(WebSocketUser user, (JObject Packet, string DataType) ServerPacket)
-	{
-		JObject packet = new JObject();
-
-		user.EncryptionManager.Manager.GenerateIV();
-
-		//byte[] sträng = Encoding.UTF8.GetBytes(ServerPacket.Packet.ToString());
-
-		//foreach (var b in sträng)
-		//{
-		//	Console.Write($"{b} ");
-		//}
-
-		var EncryptionData = user.EncryptionManager.Encrypt(ServerPacket.Packet.ToString());
-
-		packet["Type"] = ServerPacket.DataType;
-
-		packet["IV"] = user.EncryptionManager.Manager.IV;
-
-		packet["Packet"] = EncryptionData;
-
-		user.SendFrame(packet.ToString(), WebSocketOpCode.TextFrame, true);
-
-		OnMessageSend(this, new OnMessageAction(user, (ServerPacket.Packet.ToString(), WebSocketOpCode.TextFrame)));
 	}
 
 	/// <summary>

@@ -26,44 +26,41 @@
             }
 
             socket.onmessage = function (e) {
-                console.log(e.data);
                 var packet = ParsePacket(e.data);
-                console.log(packet);
             }
 
             socket.onerror = function (e) {
                 document.getElementById("logger").textContent += '\nAn error has occured!\n' + e.message;
             }
 
-            function SendToServer() {
+            async function SendToServer() {
                 var text = document.getElementById('tb-send').value;
+                var encryption = await Encrypt(text);
+                var decrypted = await Decrypt(encryption.Encrypted, encryption.IV);
+                console.log(encryption);
                 var packet = {
                     Type: "text",
-                    IV: "blank",
-                    Packet:{
-                        sträng: text
-                    }
+                    IV: btoa(ab2str(encryption.IV)),
+                    Packet: btoa(ab2str(encryption.Encrypted))
                 }
                 socket.send(JSON.stringify(packet));
             }
 
             async function ParsePacket(packet) {
                 var JsonPacket = ParseJSON(packet);
-                console.log(JsonPacket);
-                console.log(packet);
+
                 if (JsonPacket != false) {
+
+                    console.log(JsonPacket);
+
                     var TypeFunc = window[JsonPacket.Type];
                     var IV = ExtractIV(JsonPacket);
                     var PacketContent = JsonPacket.Packet;
-                    console.log("Type", JsonPacket.Type);
-                    console.log("IV", IV);
-
-                    
 
                     if (IV) {
                         PacketContent = new TextDecoder().decode((await Decrypt(str2ab(atob(PacketContent)), IV)));
                     }
-                    // console.log(PacketContent);
+
                     if (TypeFunc) {
                         TypeFunc(PacketContent);
                     } else {
@@ -77,19 +74,17 @@
 
             async function text(json){
                 
-                console.log(JSON.parse(json));
+                console.log(json);
             }
 
             async function PublicKeyExchange(json) {
                 var pemString = json["Key"];
-                const pemHeader = "-----BEGIN PRIVATE KEY-----";
-                const pemFooter = "-----END PRIVATE KEY-----";
+                const pemHeader = "-----BEGIN PUBLIC KEY-----";
+                const pemFooter = "-----END PPUBLIC KEY-----";
                 const pemContents = pemString.substring(pemHeader.length, pemString.length - pemFooter.length);
                 console.log(pemContents);
                 rsaKey = await importRsaPublicKey(pemContents);
                 console.log("Imported PublicKey");
-
-                // console.log(aesKeyBuffer);
 
                 crypto.subtle.encrypt({
                         name: "RSA-OAEP"
@@ -118,7 +113,6 @@
             }
 
             function ParseJSON(jsonString) {
-                console.log(jsonString);
                 try {
                     var o = JSON.parse(jsonString);
                     if (o && typeof o === "object") {

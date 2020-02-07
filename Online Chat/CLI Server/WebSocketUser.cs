@@ -80,9 +80,30 @@ public class WebSocketUser
 		SendFrame(Packet.ToString(), WebSocketOpCode.TextFrame, true);
 	}
 
-	public void SendText(string Text)
+	public void SendText(string Payload)
 	{
-		SendFrame(Text, WebSocketOpCode.TextFrame, true);
+		JObject packet = new JObject();
+		packet["Sträng"] = Payload;
+		SendJSON(packet, "text");
+	}
+
+	public void SendJSON(JObject Packet, string DataType)
+	{
+		JObject packet = new JObject();
+
+		EncryptionManager.Manager.GenerateIV();
+
+		var EncryptionData = EncryptionManager.Encrypt(Packet.ToString());
+
+		packet["Type"] = DataType;
+
+		packet["IV"] = EncryptionManager.Manager.IV;
+
+		packet["Packet"] = EncryptionData;
+
+		Console.WriteLine(packet);
+
+		SendFrame(packet.ToString(), WebSocketOpCode.TextFrame, true);
 	}
 
 	public bool isEncrypted()
