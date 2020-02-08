@@ -16,9 +16,7 @@ public class Program
 		{
 			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint.ToString()} Sent packet containing a frame with data: {e.Payload.PayloadString}");
 
-			e.Sender.SendJSON(JObject.Parse(e.Payload.PayloadString), "text");
-
-			//server.Send(e.Sender, (Encoding.Default.GetString(aes.Manager.Key), WebSocketOpCode.TextFrame));
+			e.Sender.SendJSON(JObject.Parse("{password: \"hello\", username:\"JENS\"}"), "text");
 		};
 
 		server.OnUserConnect += (object sender, OnUserAction e) =>

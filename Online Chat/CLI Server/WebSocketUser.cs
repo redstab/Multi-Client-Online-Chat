@@ -101,8 +101,6 @@ public class WebSocketUser
 
 		packet["Packet"] = EncryptionData;
 
-		Console.WriteLine(packet);
-
 		SendFrame(packet.ToString(), WebSocketOpCode.TextFrame, true);
 	}
 
