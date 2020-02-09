@@ -4,13 +4,14 @@
     <head>
         <meta charset="utf-8">
         <title>C# WebSocket Test</title>
-        <script crossorigin src="https://unpkg.com/react@16/umd/react.development.js"></script>
-        <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
+        <!-- <script crossorigin src="https://unpkg.com/react@16/umd/react.development.js"></script>
+        <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script> -->
         <script src="javascript/encryption.js"></script>
     </head>
-
+    
     <body>
-        <script type="text/javascript">
+        <script src="javascript/chat.js"></script>
+        <!-- <script type="text/javascript">
             // var aesKey;
             // var aesKeyBuffer;
             // var rsaKey;
@@ -194,8 +195,12 @@
             //         ["encrypt"]
             //     );
             // }
-        </script>
+        </script> -->
         <h1>WEBSOCKET TEST</h1>
+        <input id="tb-send" type="text" placeholder="Username"/>
+        <input id="tb-send" type="password" placeholder="Password" />
+        <button onclick="Login()">Login!</button>
+        <hr>
         <input id="tb-send" type="text" value="" />
         <button onclick="SendToServer()">Send!</button>
         <pre id="logger"></pre>
