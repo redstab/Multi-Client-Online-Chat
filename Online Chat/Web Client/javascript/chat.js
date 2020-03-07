@@ -18,6 +18,10 @@ socket.onerror = function (e) {
     document.getElementById("logger").textContent += '\nAn error has occured!\n' + e.message;
 }
 
+function SendToServer(text) {
+    
+}
+
 var PacketTypes = {
 
     Text: function(json) {

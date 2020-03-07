@@ -46,7 +46,7 @@ public class Server
 
 	private ManualResetEvent UntilConnected = new ManualResetEvent(false);
 
-	public bool LogEnable = false;
+	public bool LogEnable = true;
 
 	public event EventHandler<OnMessageAction> OnMessageReceive;
 	public event EventHandler<OnUserAction> OnUserConnect;
@@ -75,15 +75,17 @@ public class Server
 
 	public void StartServer()
 	{
+		Log("INFO", "Starting Server");
+		Log("INFO", "Binding to " + ListenAddress.ToIpEndPoint().ToString());
 		ListenerSocket.Bind(ListenAddress.ToIpEndPoint());
+		Log("INFO", "Listening for connections");
 		ListenerSocket.Listen(100);
 
 		while (Alive)
 		{
 			UntilConnected.Reset();
-			Log("INFO", "Waiting for a new connection");
+			Log("INFO", "Awaiting a new connection");
 			ListenerSocket.BeginAccept(new AsyncCallback(AcceptUserCallback), null);
-			Log("INFO-VERBOSE", "Waiting for server to get the new socket");
 			UntilConnected.WaitOne();
 		}
 
@@ -97,7 +99,7 @@ public class Server
 	private void AcceptUserCallback(IAsyncResult Result)
 	{
 		Socket NewSocket = ListenerSocket.EndAccept(Result);
-		Log("INFO-VERBOSE", "Got the new connection socket");
+		Log("INFO", "Got the new connection socket");
 		Log("INFO", "Allowing new connections");
 		UntilConnected.Set();
 
@@ -113,13 +115,16 @@ public class Server
 			PublicKeyPemObject["Key"] = ServerEncryptionManager.ExportPublicKey();
 
 			NewUser.SendJSON(PublicKeyPemObject, "PublicKeyExchange", false);
+			Log("INFO", "Sent Public RSA Key");
 
 			Users.Add(NewUser);
+			Log("INFO", "Successfully added a new user");
 			OnUserConnect(this, new OnUserAction(NewUser));
 		}
 		else
 		{
-			Log("INFO", "WebSocket Upgrade Failed");
+			Log("WARN", "WebSocket Upgrade Failed");
+			Log("WARN", "Disconnecting user");
 			NewSocket.Send(Encoding.Default.GetBytes("Not a Websocket Connection"));
 			NewSocket.Shutdown(SocketShutdown.Both);
 			NewSocket.Close();
@@ -177,6 +182,7 @@ public class Server
 	private bool HandleWebSocketUpgrade(Socket Client)
 	{
 		string UpgradeGetRequest = WebSocketHelper.GetUpgradeRequest(Client);
+		Log("INFO", "Got WebSocket Upgrade Request");
 
 		string SecureKey = WebSocketHelper.GetWebSocketKeyFromResponse(UpgradeGetRequest);
 
@@ -185,12 +191,16 @@ public class Server
 			return false;
 		}
 
+		Log("INFO", "Got WebSocket Key");
+
 		string ResponseKey = WebSocketHelper.GetAcceptKey(SecureKey);
 
 		string Response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + ResponseKey + "\r\n\r\n";
 
 		Client.Send(Encoding.Default.GetBytes(Response));
 
+		Log("INFO", "Sent WebSocket Upgrade Response");
+		
 		return true;
 	}
 
