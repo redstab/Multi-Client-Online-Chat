@@ -44,7 +44,7 @@ public class Server
 
 	public bool Alive { get; set; }
 
-	private ManualResetEvent UntilConnected = new ManualResetEvent(false);
+	private readonly ManualResetEvent UntilConnected = new ManualResetEvent(false);
 
 	public bool LogEnable = true;
 
@@ -110,9 +110,11 @@ public class Server
 			Log("INFO", "Added User to UserList");
 
 			var NewUser = new WebSocketUser(NewSocket, this);
-			var PublicKeyPemObject = new JObject();
-			PublicKeyPemObject["KeyType"] = "RSAPublicKey";
-			PublicKeyPemObject["Key"] = ServerEncryptionManager.ExportPublicKey();
+			var PublicKeyPemObject = new JObject
+			{
+				["KeyType"] = "RSAPublicKey",
+				["Key"] = ServerEncryptionManager.ExportPublicKey()
+			};
 
 			NewUser.SendJSON(PublicKeyPemObject, "PublicKeyExchange", false);
 			Log("INFO", "Sent Public RSA Key");

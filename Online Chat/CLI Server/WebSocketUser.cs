@@ -12,7 +12,7 @@ public class WebSocketUser
 	public int ID { get; set; }
 	public Socket ConnectedSocket { get; set; }
 	public Server ConnectedServer { get; set; }
-	private byte[] ReceiveBuffer;
+	private readonly byte[] ReceiveBuffer;
 	private WebSocketPacket CurrentPacket { get; set; }
 
 	public AES EncryptionManager;
@@ -63,8 +63,10 @@ public class WebSocketUser
 	public void SendJSON(JObject json, string type, bool encrypted)
 	{
 
-		JObject Packet = new JObject();
-		Packet["Type"] = type;
+		JObject Packet = new JObject
+		{
+			["Type"] = type
+		};
 		if (encrypted)
 		{
 			EncryptionManager.Manager.GenerateIV();
@@ -82,8 +84,10 @@ public class WebSocketUser
 
 	public void SendText(string Payload)
 	{
-		JObject packet = new JObject();
-		packet["Sträng"] = Payload;
+		JObject packet = new JObject
+		{
+			["Sträng"] = Payload
+		};
 		SendJSON(packet, "text");
 	}
 
@@ -104,7 +108,7 @@ public class WebSocketUser
 		SendFrame(packet.ToString(), WebSocketOpCode.TextFrame, true);
 	}
 
-	public bool isEncrypted()
+	public bool IsEncrypted()
 	{
 		return EncryptionManager != null;
 	}

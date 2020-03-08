@@ -36,9 +36,11 @@ public class AES
 
 	public JObject SerilizeKey()
 	{
-		JObject Key = new JObject();
-		Key["KEY"] = new JArray(Manager.Key.Select(b => (uint)b).ToArray());
-		Key["IV"] = new JArray(Manager.IV.Select(b => (uint)b).ToArray());
+		JObject Key = new JObject
+		{
+			["KEY"] = new JArray(Manager.Key.Select(b => (uint)b).ToArray()),
+			["IV"] = new JArray(Manager.IV.Select(b => (uint)b).ToArray())
+		};
 		return Key;
 	}
 	public void DeserilizeKey(JObject Key)
@@ -79,7 +81,6 @@ public class AES
 
 	public byte[] Decrypt(byte[] Input)
 	{
-		string Decrypted = "";
 		// Create a decrytor to perform the stream transform.
 		ICryptoTransform decryptor = Manager.CreateDecryptor(Manager.Key, Manager.IV);
 
