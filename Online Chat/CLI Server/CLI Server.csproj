@@ -86,6 +86,7 @@
     <Compile Include="AES.cs" />
     <Compile Include="ChatServer.cs" />
     <Compile Include="Database.cs" />
+    <Compile Include="DatabaseConnection.cs" />
     <Compile Include="EndPoint.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

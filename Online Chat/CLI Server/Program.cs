@@ -1,4 +1,5 @@
 ﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -9,9 +10,18 @@ public class Program
 	public static void Main()
 	{
 
-		UserDatabase users = new UserDatabase("mongodb://localhost:27017");
+		DatabaseConnection ChatAppConnection = new DatabaseConnection("mongodb://localhost:27017");
 
-		users.db.GetDatabase("ChatUsers").GetCollection<BsonDocument>("users").InsertOne(new BsonDocument { { "name", "jens" }, { "age", 12 } } );
+		Database ChatApp = new Database(ChatAppConnection, "Chat_App");
+
+		ChatApp.GetCollection<BsonDocument>("Users").InsertOne(new BsonDocument { { "name", "Jes" }, { "pwd", "temp" } });
+		//Console.WriteLine(collection.ToJson());
+
+		Console.Read();
+
+		//db.GetCollection<BsonDocument>("Users").InsertOne(new BsonDocument { {"name", "Jes" }, { "pwd", "temp" } });
+
+		//users.db.GetDatabase("ChatUsers").GetCollection<BsonDocument>("users").InsertOne(new BsonDocument { { "name", "jens" }, { "age", 12 } } );
 
 		//EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
 

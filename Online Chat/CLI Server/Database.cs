@@ -1,39 +1,26 @@
-﻿using System;
+﻿using MongoDB.Driver;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using MongoDB.Driver;
+
 
 public class Database
 {
-	private MongoClient Connection;
-	private string ConnectionsString;
+	private DatabaseConnection dbConnection;
+
 	private IMongoDatabase DatabaseReference;
 
-	public Database(string ConnectString, string database)
+	public Database(DatabaseConnection connection, string dbName)
 	{
-		ConnectionsString = ConnectString;
+		dbConnection = connection;
+		DatabaseReference = dbConnection.OpenDatabase(dbName);
 	}
 
-	public void Connect()
+	public IMongoCollection<T> GetCollection<T>(string name)
 	{
-		Connection = new MongoClient(ConnectionsString);
+		return DatabaseReference.GetCollection<T>(name);
 	}
 
-	//Syntax candy
-	public void Reconnect()
-	{
-		Connect();
-	}
-
-	private IMongoDatabase OpenDatabase(string name)
-	{
-		DatabaseReference = Connection.GetDatabase(name);
-	}
-
-	private  OpenCollection()
-	{
-
-	}
 }
