@@ -3,6 +3,7 @@ using MongoDB.Driver;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 public class Program
@@ -12,9 +13,19 @@ public class Program
 
 		DatabaseConnection ChatAppConnection = new DatabaseConnection("mongodb://localhost:27017");
 
-		Database ChatApp = new Database(ChatAppConnection, "Chat_App");
+		UserDatabase ChatUsers = new UserDatabase(ChatAppConnection);
 
-		ChatApp.GetCollection<BsonDocument>("Users").InsertOne(new BsonDocument { { "name", "Jes" }, { "pwd", "temp" } });
+		Console.WriteLine(ChatUsers.Login("4712", "hunter2"));
+
+		Console.WriteLine(ChatUsers.AddUser("4712", "hunter2", "4722222"));
+
+		Console.WriteLine(ChatUsers.UsernameTaken("4712"));
+		Console.WriteLine(ChatUsers.AliasTaken("4722222"));
+
+		ChatUsers.RemoveUser("4712");
+
+		//UserDatabase ChatApp = new Database(ChatAppConnection, "Chat_App");
+
 		//Console.WriteLine(collection.ToJson());
 
 		Console.Read();

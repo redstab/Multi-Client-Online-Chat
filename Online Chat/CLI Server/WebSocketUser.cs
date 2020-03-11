@@ -8,8 +8,6 @@ using System.Security.Cryptography;
 
 public class WebSocketUser
 {
-	public string Username { get; set; }
-	public int ID { get; set; }
 	public Socket ConnectedSocket { get; set; }
 	public Server ConnectedServer { get; set; }
 	private readonly byte[] ReceiveBuffer;
@@ -28,7 +26,6 @@ public class WebSocketUser
 	public void InitilizeEncryption(byte[] Key)
 	{
 		EncryptionManager = new AES(Key);
-
 	}
 
 	public void InitilizeEncryption()
