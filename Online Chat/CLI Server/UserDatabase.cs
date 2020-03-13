@@ -18,7 +18,7 @@ public class UserDatabase : Database
 
 	public bool Login(string Username, string Password)
 	{
-		return UserCollection.Find(u => u.LoginUsername == Username && u.Password == EncryptString(Password)).FirstOrDefault() != null;
+		return UserCollection.Find(u => u.LoginUsername == Username && u.LoginPassword == EncryptString(Password)).FirstOrDefault() != null;
 	}
 
 	public bool UsernameTaken(string Username)
@@ -39,9 +39,57 @@ public class UserDatabase : Database
 		}
 	}
 
-	public void RemoveUser(string Username)
+	public bool AddUser(ChatUser user)
 	{
-		UserCollection.DeleteOne(u => u.LoginUsername == Username);
+		if (UserTaken(user))
+		{
+			return false;
+		}
+		else
+		{
+			user.LoginPassword = EncryptString(user.LoginPassword);
+			UserCollection.InsertOne(user);
+			return true;
+		}
+	}
+
+	public void ReplaceUser(string Username, ChatUser user)
+	{
+		UserCollection.ReplaceOne(u => u.LoginUsername == Username, user);
+	}
+
+	public bool UpdateUser<T>(string username, string property, T new_property_value)
+	{
+		if(typeof(ChatUser).GetProperties().Select(prop => prop.Name).Contains(property))
+		{
+			UserCollection.UpdateOne(
+					Builders<ChatUser>.Filter.Eq("LoginUsername", username),
+					Builders<ChatUser>.Update.Set(property, new_property_value)
+				);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	public bool UserTaken(ChatUser user)
+	{
+		return UsernameTaken(user.LoginUsername) || AliasTaken(user.Alias);
+	}
+
+	public bool RemoveUser(string Username)
+	{
+		if (UsernameTaken(Username))
+		{
+			UserCollection.DeleteOne(u => u.LoginUsername == Username);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	public bool AliasTaken(string alias)
@@ -49,7 +97,12 @@ public class UserDatabase : Database
 		return UserCollection.Find(u => u.Alias == alias).FirstOrDefault() != null;
 	}
 
-	private string EncryptString(string text)
+	public ChatUser QueryUser(string username)
+	{
+		return UserCollection.Find(u => u.LoginUsername == username).FirstOrDefault();
+	}
+
+	public string EncryptString(string text)
 	{
 		using (var sha256 = new SHA256Managed())
 		{

@@ -8,26 +8,28 @@ using System.Security;
 using System.Text;
 using System.Threading.Tasks;
 
-class ChatUser
+public class ChatUser
 {
 	public ObjectId Id { get; set; }
+
 	public ChatUser(string username, string password)
 	{
 		LoginUsername = username;
-		Password = password;
+		LoginPassword = password;
 	}
 
 	public ChatUser(string username, string password, string alias)
 	{
 		LoginUsername = username;
-		Password = password;
+		LoginPassword = password;
 		Alias = alias;
 	}
 
 	[BsonIgnore] public WebSocketUser Socket { get; set; }
 
 	public string LoginUsername { get; set; } // Email or username
-	public string Password { get; set; }
+
+	public string LoginPassword { get; set; }
 
 	public string Alias { get; set; }
 

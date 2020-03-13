@@ -22,5 +22,4 @@ public class Database
 	{
 		return DatabaseReference.GetCollection<T>(name);
 	}
-
 }

@@ -91,7 +91,7 @@ function GenerateAES() {
 }
 
 async function Encrypt(str, key) {
-    var iv = Crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(16));
     return {
         IV: iv,
         Encrypted: await Crypto.encrypt({
@@ -114,12 +114,12 @@ function Decrypt(buffer, key, iv) {
     );
 }
 
-function GeneratePacket(json, type, encrypt) {
+async function GeneratePacket(json, type, encrypt) {
     var iv = 'blank';
     var payload = json;
 
     if (encrypt) {
-        var encryption = Encrypt(JSON.stringify(json), AesKey);
+        var encryption = await Encrypt(JSON.stringify(json), AesKey);        
         iv = ByteArrayToBase64(encryption.IV);
         payload = ByteArrayToBase64(encryption.Encrypted);
     }
