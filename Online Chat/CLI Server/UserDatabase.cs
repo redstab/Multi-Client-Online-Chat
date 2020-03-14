@@ -18,7 +18,8 @@ public class UserDatabase : Database
 
 	public bool Login(string Username, string Password)
 	{
-		return UserCollection.Find(u => u.LoginUsername == Username && u.LoginPassword == EncryptString(Password)).FirstOrDefault() != null;
+		//return UserCollection.Find(u => u.LoginUsername == Username && u.LoginPassword == EncryptString(Password)).FirstOrDefault() != null;
+		return UserCollection.Find(u => u.LoginUsername == Username && u.LoginPassword == Password).FirstOrDefault() != null;
 	}
 
 	public bool UsernameTaken(string Username)
@@ -34,7 +35,8 @@ public class UserDatabase : Database
 		}
 		else
 		{
-			UserCollection.InsertOne(new ChatUser(Username, EncryptString(Password), Alias));
+			//UserCollection.InsertOne(new ChatUser(Username, EncryptString(Password), Alias));
+			UserCollection.InsertOne(new ChatUser(Username, Password, Alias));
 			return true;
 		}
 	}
@@ -47,7 +49,7 @@ public class UserDatabase : Database
 		}
 		else
 		{
-			user.LoginPassword = EncryptString(user.LoginPassword);
+			//user.LoginPassword = EncryptString(user.LoginPassword);
 			UserCollection.InsertOne(user);
 			return true;
 		}

@@ -5,13 +5,14 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Linq;
 
 public class OnMessageAction : EventArgs
 {
-	public WebSocketUser Sender { get; private set; }
+	public ChatUser Sender { get; private set; }
 	public (string PayloadString, WebSocketOpCode Opcode) Payload { get; set; }
 
-	public OnMessageAction(WebSocketUser Sender, (string Payload, WebSocketOpCode Opcode) Packet)
+	public OnMessageAction(ChatUser Sender, (string Payload, WebSocketOpCode Opcode) Packet)
 	{
 		this.Sender = Sender;
 		this.Payload = Packet;
@@ -20,9 +21,9 @@ public class OnMessageAction : EventArgs
 
 public class OnUserAction : EventArgs
 {
-	public WebSocketUser Sender { get; private set; }
+	public ChatUser Sender { get; private set; }
 
-	public OnUserAction(WebSocketUser Sender)
+	public OnUserAction(ChatUser Sender)
 	{
 		this.Sender = Sender;
 	}
@@ -52,7 +53,7 @@ public class Server
 	public event EventHandler<OnUserAction> OnUserConnect;
 	public event EventHandler<OnUserAction> OnUserDisconnect;
 
-	public List<WebSocketUser> Users = new List<WebSocketUser>();
+	public List<ChatUser> Users = new List<ChatUser>();
 	/// <summary>
 	/// Konstruera en server som ska lyssna på en EndPoint
 	/// </summary>
@@ -109,14 +110,14 @@ public class Server
 			Log("INFO", "WebSocket Upgrade Successful");
 			Log("INFO", "Added User to UserList");
 
-			var NewUser = new WebSocketUser(NewSocket, this);
+			var NewUser = new ChatUser(new WebSocketUser(NewSocket, this));
 			var PublicKeyPemObject = new JObject
 			{
 				["KeyType"] = "RSAPublicKey",
 				["Key"] = ServerEncryptionManager.ExportPublicKey()
 			};
 
-			NewUser.SendJSON(PublicKeyPemObject, "PublicKeyExchange", false);
+			NewUser.Socket.SendJSON(PublicKeyPemObject, "PublicKeyExchange", false);
 			Log("INFO", "Sent Public RSA Key");
 
 			Users.Add(NewUser);
@@ -133,7 +134,7 @@ public class Server
 		}
 	}
 
-	public void Receive(WebSocketUser user, string Payload, WebSocketOpCode OpCode)
+	public void Receive(ChatUser user, string Payload, WebSocketOpCode OpCode)
 	{
 		// Decrypt here
 
@@ -155,15 +156,15 @@ public class Server
 
 				var AesKey = ServerEncryptionManager.Decrypt(EncryptedPayload);
 
-				user.InitilizeEncryption(AesKey);
+				user.Socket.InitilizeEncryption(AesKey);
 
 				Deserilized["Packet"] = AesKey;
 
 			}
 			else
 			{
-				user.EncryptionManager.Manager.IV = Deserilized["IV"].ToObject<byte[]>();
-				byte[] DecryptedString = user.EncryptionManager.Decrypt(EncryptedPayload);
+				user.Socket.EncryptionManager.Manager.IV = Deserilized["IV"].ToObject<byte[]>();
+				byte[] DecryptedString = user.Socket.EncryptionManager.Decrypt(EncryptedPayload);
 				Deserilized["Packet"] = Encoding.Default.GetString(DecryptedString);
 
 				OnMessageReceive(this, new OnMessageAction(user, (Deserilized.ToString(), OpCode)));
@@ -173,6 +174,11 @@ public class Server
 		{
 			OnMessageReceive(this, new OnMessageAction(user, (JsonConvert.SerializeObject(Deserilized), OpCode)));
 		}
+	}
+	public void Receive(WebSocketUser user, string Payload, WebSocketOpCode OpCode)
+	{
+		var ChatUser = Users.Where(u => u.Socket == user).First();
+		Receive(ChatUser, Payload, OpCode);
 	}
 
 	/// <summary>
@@ -208,10 +214,11 @@ public class Server
 
 	public void DisconnectUser(WebSocketUser user)
 	{
-		OnUserDisconnect(this, new OnUserAction(user));
+		var DisconnectedUser = new ChatUser(user);
+		OnUserDisconnect(this, new OnUserAction(DisconnectedUser));
 		user.ConnectedSocket.Shutdown(SocketShutdown.Both);
 		user.ConnectedSocket.Close();
-		Users.Remove(user);
+		Users.Remove(Users.Where(u => u.Socket == user).First());
 	}
 
 }

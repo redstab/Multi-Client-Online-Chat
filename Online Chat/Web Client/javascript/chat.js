@@ -44,13 +44,17 @@ class Connection{
                 Log("[Communication] Websocket received a new message: ", 'lightgreen', event.data);
                 ParsePacket(event.data);
             });
+
+            this.socket.onclose = (event) => {
+                Log("[Error] Websocket disconnected", 'red', event);
+            }
             
         });
     }
 
 }
 
-var ServerConnection = new Connection('127.0.0.1', 8010);
+var ServerConnection;
 
 $(document).ready(function(){
     GenerateKey();
@@ -65,6 +69,9 @@ function WaitEncryption(callback){
 }
 
 async function Login(){
+
+    ServerConnection = new Connection('127.0.0.1', 8010);
+
     let username = $('input[name="Username"]').val();
     let password = $('input[name="Password"]').val();
 

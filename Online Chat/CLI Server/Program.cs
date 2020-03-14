@@ -45,28 +45,59 @@ public class Program
 
 		//users.db.GetDatabase("ChatUsers").GetCollection<BsonDocument>("users").InsertOne(new BsonDocument { { "name", "jens" }, { "age", 12 } } );
 
+
+		//Server server = new Server(ListenAddress);
+
+		//server.OnMessageReceive += (object sender, OnMessageAction e) =>
+		//{
+		//	JObject Packet = JObject.Parse(e.Payload.PayloadString);
+		//	Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Sent packet containing a frame with data: {Packet}");
+		//};
+
+		//server.OnUserConnect += (object sender, OnUserAction e) =>
+		//{
+		//	Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Connected to the server");
+		//	//server.Send(e.Sender, (aes.SerilizeKey().ToString(), WebSocketOpCode.TextFrame));
+		//};
+
+		//server.OnUserDisconnect += (object sender, OnUserAction e) =>
+		//{
+		//	Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Disconnected from the server");
+		//};
+
+		//server.StartServer();
+
 		EndPoint ListenAddress = new EndPoint("127.0.0.1", 8010);
+		DatabaseConnection ChatAppConnection = new DatabaseConnection("mongodb://localhost:27017");
 
-		Server server = new Server(ListenAddress);
-
-		server.OnMessageReceive += (object sender, OnMessageAction e) =>
+		Dictionary<string, Func<OnMessageAction, ChatServer, JObject, PacketResponse>> PacketSwitching = new Dictionary<string, Func<OnMessageAction, ChatServer, JObject, PacketResponse>>
 		{
-			JObject Packet = JObject.Parse(e.Payload.PayloadString);
-			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Sent packet containing a frame with data: {Packet}");
+			{"Authentication", (OnMessageAction e, ChatServer s, JObject Packet) => {
+
+				var DeserilizedPacket = JObject.Parse(Packet["Packet"].ToString());
+
+				string Username = DeserilizedPacket["Username"].ToString();
+				string Password = DeserilizedPacket["Password"].ToString();
+
+				if(s.UserDB.Login(Username, Password))
+				{
+					ChatUser dbQuery = s.UserDB.QueryUser(Username);
+					e.Sender.Alias = dbQuery.Alias;
+					e.Sender.LoginUsername = Username;
+					e.Sender.LoginPassword = Password;
+				}
+
+				return new PacketResponse()
+				{
+					ShouldSend = true,
+					Response = JObject.Parse("{name: \"jens\"}"),
+					Type = "AuthResponse"
+				};
+			}}
 		};
 
-		server.OnUserConnect += (object sender, OnUserAction e) =>
-		{
-			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Connected to the server");
-			//server.Send(e.Sender, (aes.SerilizeKey().ToString(), WebSocketOpCode.TextFrame));
-		};
+		ChatServer Server = new ChatServer(ListenAddress, ChatAppConnection, PacketSwitching);
 
-		server.OnUserDisconnect += (object sender, OnUserAction e) =>
-		{
-			Console.WriteLine($"{e.Sender.ConnectedSocket.RemoteEndPoint} Disconnected from the server");
-		};
-
-		server.StartServer();
-
+		Server.StartServer();
 	}
 }

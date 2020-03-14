@@ -1,6 +1,7 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,6 +24,16 @@ public class ChatUser
 		LoginUsername = username;
 		LoginPassword = password;
 		Alias = alias;
+	}
+
+	public ChatUser(WebSocketUser user)
+	{
+		Socket = user;
+	}
+
+	public void Send(JObject json, string type)
+	{
+		Socket.SendJSON(json, type, true);
 	}
 
 	[BsonIgnore] public WebSocketUser Socket { get; set; }
